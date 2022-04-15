@@ -69,7 +69,7 @@ public class KTsp extends GRBCallback {
                             // x2
                             traveler2[i][j] = model.addVar(0.0, 1.0, distance(x2, y2, i, j),
                                     GRB.BINARY, "t2_[" + i + "][" + j + "]");
-                            traveler2[j][i] = traveler1[i][j];
+                            traveler2[j][i] = traveler2[i][j];
 
                             // De
                             shared[i][j] = model.addVar(0.0, 1.0, 0.0,
