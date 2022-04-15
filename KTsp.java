@@ -22,7 +22,7 @@ public class KTsp extends GRBCallback {
         int[] x2 = new int[250];
         int[] y2 = new int[250];
 
-        String coordinatesFileName = "/home/matheus.nunes/Unicamp/2022/MO824-proj-teorico/ativ2/mo824-activity2/mo824_atividade2_coords.in";
+        String coordinatesFileName = args[0];
         try (FileInputStream fis = new FileInputStream(coordinatesFileName);
             Scanner sc = new Scanner(fis)) {
             int i = 0;
@@ -231,6 +231,37 @@ public class KTsp extends GRBCallback {
 
     @Override
     protected void callback() {
-        // TODO: Implement callback
+        try {
+            if (where == GRB.CB_MIPSOL) {
+                // Found an integer feasible solution - does it visit every node?
+                int n = traveler1Vars.length;
+                int[] tour = findsubtour(getSolution(traveler1Vars));
+
+                if (tour.length < n) {
+                    // Add subtour elimination constraint
+                    GRBLinExpr expr = new GRBLinExpr();
+                    for (int i = 0; i < tour.length; i++)
+                        for (int j = i + 1; j < tour.length; j++)
+                            expr.addTerm(1.0, traveler1Vars[tour[i]][tour[j]]);
+                    addLazy(expr, GRB.LESS_EQUAL, tour.length-1);
+                }
+
+                n = traveler2Vars.length;
+                tour = findsubtour(getSolution(traveler2Vars));
+
+                if (tour.length < n) {
+                    // Add subtour elimination constraint
+                    GRBLinExpr expr = new GRBLinExpr();
+                    for (int i = 0; i < tour.length; i++)
+                        for (int j = i+1; j < tour.length; j++)
+                            expr.addTerm(1.0, traveler2Vars[tour[i]][tour[j]]);
+                    addLazy(expr, GRB.LESS_EQUAL, tour.length - 1);
+                }
+            }
+        } catch (GRBException e) {
+            System.out.println("Error code: " + e.getErrorCode() + ". " +
+                    e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
