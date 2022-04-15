@@ -44,6 +44,7 @@ public class KTsp extends GRBCallback {
             for (Integer similarity : similaritiesValues) {
                 Integer k = similarity == 0 ? 0 : (v / similarity);
 
+                System.out.println("\n\n######################## START ########################");
                 System.out.println("Executing kTSP for |V|=" + v + " and similarity k=" + k);
 
                 try {
@@ -108,11 +109,8 @@ public class KTsp extends GRBCallback {
                             dExpr.addTerm(1.0, shared[i][j]);
                         }
                     }
-                    model.addConstr(dExpr, GRB.EQUAL, k, "de_similarity"); // TODO: maybe it could be GRB.GREATER_EQUAL because:
-                    /*
-                        "k = 0 resulta em uma solução factível ser qualquer par de ciclos Hamiltonianos."
-                     */
-
+                    model.addConstr(dExpr, GRB.GREATER_EQUAL, k, "de_similarity");
+                    // TODO: Check why GRB.EQUAL is infeasible when k < |V|
                     // Forbid edge from node back to itself
                     for (int i = 0; i < v; i++) {
                         traveler1[i][i].set(GRB.DoubleAttr.UB, 0.0);
@@ -152,6 +150,7 @@ public class KTsp extends GRBCallback {
                         }
                         System.out.println();
                     }
+                    System.out.println("######################## END ########################\n\n");
 
                     // Dispose of model and environment
                     model.dispose();
