@@ -91,18 +91,18 @@ public class KTsp extends GRBCallback {
                         model.addConstr(t2_expr, GRB.EQUAL, 2.0, "t2_deg2_" + i);
                     }
 
-                    // xe1 + xe2 = 2De -> xe1 + xe2 - 2De = 0
+                    // xe1 + xe2 >= 2De -> xe1 + xe2 - 2De >= 0
                     for (int i = 0; i < v; i++) {
                         for (int j = 0; j < i; j++) {
                             GRBLinExpr expr = new GRBLinExpr();
                             expr.addTerm(1.0, traveler1[i][j]);
                             expr.addTerm(1.0, traveler2[i][j]);
                             expr.addTerm(-2.0, shared[i][j]);
-                            model.addConstr(expr, GRB.EQUAL, 0, "x1_plus_x2_equals_de2[" + i + "][" + j + "]");
+                            model.addConstr(expr, GRB.GREATER_EQUAL, 0, "x1_plus_x2_equals_de2[" + i + "][" + j + "]");
                         }
                     }
 
-                    // (e ∈ E)∑ De = k
+                    // (e ∈ E)∑ De >= k
                     GRBLinExpr dExpr = new GRBLinExpr();
                     for (int i = 0; i < v; i++) {
                         for (int j = 0; j < i; j++) {
@@ -110,7 +110,7 @@ public class KTsp extends GRBCallback {
                         }
                     }
                     model.addConstr(dExpr, GRB.GREATER_EQUAL, k, "de_similarity");
-                    // TODO: Check why GRB.EQUAL is infeasible when k < |V|
+
                     // Forbid edge from node back to itself
                     for (int i = 0; i < v; i++) {
                         traveler1[i][i].set(GRB.DoubleAttr.UB, 0.0);
@@ -118,25 +118,15 @@ public class KTsp extends GRBCallback {
                         shared[i][i].set(GRB.DoubleAttr.UB, 0.0);
                     }
 
-                    model.setCallback(new KTsp(traveler1, traveler2, shared));
+                    model.setCallback(new KTsp(traveler1, traveler2));
                     model.set(GRB.DoubleParam.TimeLimit, TIME_LIMIT_IN_SECONDS);
-                    // TODO: Add rest of restrictions + callback to optimize
-                     model.optimize();
+                    model.optimize();
 
                     if (model.get(GRB.IntAttr.SolCount) > 0) {
                         int[] t1Tour = findsubtour(model.get(GRB.DoubleAttr.X, traveler1));
                         int[] t2Tour = findsubtour(model.get(GRB.DoubleAttr.X, traveler2));
                         assert t1Tour.length == v;
                         assert t2Tour.length == v;
-
-                        double[][] sharedTour = model.get(GRB.DoubleAttr.X, shared);
-                        int sharedCount = 0;
-                        for (int i = 0; i < v; i++) {
-                            for (int j = 0; j < i; j++) {
-                                sharedCount += sharedTour[i][j];
-                            }
-                        }
-                        System.out.println("Shared tour betwen T1 and T2: " + sharedCount);
 
                         System.out.print("Tour T1 (" + t1Tour.length + "): ");
                         for (int i = 0; i < t1Tour.length; i++) {
@@ -167,11 +157,9 @@ public class KTsp extends GRBCallback {
 
     private GRBVar[][] traveler1Vars;
     private GRBVar[][] traveler2Vars;
-    private GRBVar[][] shared;
-    public KTsp(GRBVar[][] traveler1Vars, GRBVar[][] traveler2Vars, GRBVar[][] shared) {
+    public KTsp(GRBVar[][] traveler1Vars, GRBVar[][] traveler2Vars) {
         this.traveler1Vars = traveler1Vars;
         this.traveler2Vars = traveler2Vars;
-        this.shared = shared;
     }
 
     // Given an integer-feasible solution 'sol', return the smallest
@@ -243,7 +231,7 @@ public class KTsp extends GRBCallback {
                     for (int i = 0; i < tour.length; i++)
                         for (int j = i + 1; j < tour.length; j++)
                             expr.addTerm(1.0, traveler1Vars[tour[i]][tour[j]]);
-                    addLazy(expr, GRB.LESS_EQUAL, tour.length-1);
+                    addLazy(expr, GRB.LESS_EQUAL, tour.length - 1);
                 }
 
                 n = traveler2Vars.length;
