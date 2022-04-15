@@ -5,11 +5,12 @@ import java.io.IOException;
 import java.util.Scanner;
 
 public class KTsp extends GRBCallback {
+    private static int TIME_LIMIT_IN_SECONDS = 30 * 60; // 30 minutes
     // Euclidean distance between points 'i' and 'j'
-    protected static double distance(int[] x, int[] y, int i, int j) {
-        double dx = x[i] - x[j];
-        double dy = y[i] - y[j];
-        return Math.sqrt(dx * dx + dy * dy);
+    protected static int distance(int[] x, int[] y, int i, int j) {
+        int dx = x[i] - x[j];
+        int dy = y[i] - y[j];
+        return (int) Math.ceil(Math.sqrt(dx * dx + dy * dy));
     }
 
     public static void main(String[] args) {
@@ -72,6 +73,7 @@ public class KTsp extends GRBCallback {
                             // De
                             shared[i][j] = model.addVar(0.0, 1.0, 0.0,
                                     GRB.BINARY, "d[" + i + "][" + j + "]");
+                            shared[j][i] = shared[i][j];
                         }
                     }
 
@@ -88,6 +90,17 @@ public class KTsp extends GRBCallback {
                         model.addConstr(t2_expr, GRB.EQUAL, 2.0, "t2_deg2_" + i);
                     }
 
+                    // xe1 + xe2 = 2De -> xe1 + xe2 - 2De = 0
+                    for (int i = 0; i < v; i++) {
+                        for (int j = 0; j < i; j++) {
+                            GRBLinExpr expr = new GRBLinExpr();
+                            expr.addTerm(1.0, traveler1[i][j]);
+                            expr.addTerm(1.0, traveler2[i][j]);
+                            expr.addTerm(-2.0, shared[i][j]);
+                            model.addConstr(expr, GRB.EQUAL, 0, "x1_plus_x2_equals_de2[" + i + "][" + j + "]");
+                        }
+                    }
+
                     // (e ∈ E)∑ De = k
                     GRBLinExpr dExpr = new GRBLinExpr();
                     for (int i = 0; i < v; i++) {
@@ -95,11 +108,10 @@ public class KTsp extends GRBCallback {
                             dExpr.addTerm(1.0, shared[i][j]);
                         }
                     }
-                    // TODO: maybe it could be GRB.GREATER_EQUAL, check if should be GRB.EQUAL because:
+                    model.addConstr(dExpr, GRB.EQUAL, k, "de_similarity"); // TODO: maybe it could be GRB.GREATER_EQUAL because:
                     /*
                         "k = 0 resulta em uma solução factível ser qualquer par de ciclos Hamiltonianos."
                      */
-                    model.addConstr(dExpr, GRB.EQUAL, k, "de_similarity");
 
                     // Forbid edge from node back to itself
                     for (int i = 0; i < v; i++) {
@@ -109,8 +121,37 @@ public class KTsp extends GRBCallback {
                     }
 
                     model.setCallback(new KTsp(traveler1, traveler2, shared));
+                    model.set(GRB.DoubleParam.TimeLimit, TIME_LIMIT_IN_SECONDS);
                     // TODO: Add rest of restrictions + callback to optimize
-                    // model.optimize();
+                     model.optimize();
+
+                    if (model.get(GRB.IntAttr.SolCount) > 0) {
+                        int[] t1Tour = findsubtour(model.get(GRB.DoubleAttr.X, traveler1));
+                        int[] t2Tour = findsubtour(model.get(GRB.DoubleAttr.X, traveler2));
+                        assert t1Tour.length == v;
+                        assert t2Tour.length == v;
+
+                        double[][] sharedTour = model.get(GRB.DoubleAttr.X, shared);
+                        int sharedCount = 0;
+                        for (int i = 0; i < v; i++) {
+                            for (int j = 0; j < i; j++) {
+                                sharedCount += sharedTour[i][j];
+                            }
+                        }
+                        System.out.println("Shared tour betwen T1 and T2: " + sharedCount);
+
+                        System.out.print("Tour T1 (" + t1Tour.length + "): ");
+                        for (int i = 0; i < t1Tour.length; i++) {
+                            System.out.print(t1Tour[i] + " ");
+                        }
+                        System.out.println();
+
+                        System.out.print("Tour T2 (" + t2Tour.length + "): ");
+                        for (int i = 0; i < t2Tour.length; i++) {
+                            System.out.print(t2Tour[i] + " ");
+                        }
+                        System.out.println();
+                    }
 
                     // Dispose of model and environment
                     model.dispose();
@@ -132,6 +173,61 @@ public class KTsp extends GRBCallback {
         this.traveler1Vars = traveler1Vars;
         this.traveler2Vars = traveler2Vars;
         this.shared = shared;
+    }
+
+    // Given an integer-feasible solution 'sol', return the smallest
+    // sub-tour (as a list of node indices).
+    protected static int[] findsubtour(double[][] sol) {
+        int n = sol.length;
+        boolean[] seen = new boolean[n];
+        int[] tour = new int[n];
+        int bestInd, bestLen;
+        int i, node, len, start;
+
+        for (i = 0; i < n; i++) {
+            seen[i] = false;
+        }
+
+        start = 0;
+        bestLen = n + 1;
+        bestInd = -1;
+        while (start < n) {
+            // Get unseen node
+            for (node = 0; node < n; node++) {
+                if (!seen[node]) {
+                    break;
+                }
+            }
+            if (node == n) {
+                break;
+            }
+
+            for (len = 0; len < n; len++) {
+                tour[start + len] = node;
+                seen[node] = true;
+                for (i = 0; i < n; i++) {
+                    if (sol[node][i] > 0.5 && !seen[i]) {
+                        node = i;
+                        break;
+                    }
+                }
+                if (i == n) {
+                    len++;
+                    if (len < bestLen) {
+                        bestLen = len;
+                        bestInd = start;
+                    }
+                    start += len;
+                    break;
+                }
+            }
+        }
+
+        int result[] = new int[bestLen];
+        for (i = 0; i < bestLen; i++) {
+            result[i] = tour[bestInd + i];
+        }
+        return result;
     }
 
     @Override
