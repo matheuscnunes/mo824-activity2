@@ -101,6 +101,21 @@ public class KTsp extends GRBCallback {
                      */
                     model.addConstr(dExpr, GRB.EQUAL, k, "de_similarity");
 
+                    // Forbid edge from node back to itself
+                    for (int i = 0; i < v; i++) {
+                        traveler1[i][i].set(GRB.DoubleAttr.UB, 0.0);
+                        traveler2[i][i].set(GRB.DoubleAttr.UB, 0.0);
+                        shared[i][i].set(GRB.DoubleAttr.UB, 0.0);
+                    }
+
+                    model.setCallback(new KTsp(traveler1, traveler2, shared));
+                    // TODO: Add rest of restrictions + callback to optimize
+                    // model.optimize();
+
+                    // Dispose of model and environment
+                    model.dispose();
+                    env.dispose();
+
                 } catch (GRBException e) {
                     System.out.println("Error code: " + e.getErrorCode() + ". " +
                             e.getMessage());
@@ -112,9 +127,11 @@ public class KTsp extends GRBCallback {
 
     private GRBVar[][] traveler1Vars;
     private GRBVar[][] traveler2Vars;
-    public KTsp(GRBVar[][] traveler1Vars, GRBVar[][] traveler2Vars) {
+    private GRBVar[][] shared;
+    public KTsp(GRBVar[][] traveler1Vars, GRBVar[][] traveler2Vars, GRBVar[][] shared) {
         this.traveler1Vars = traveler1Vars;
         this.traveler2Vars = traveler2Vars;
+        this.shared = shared;
     }
 
     @Override
